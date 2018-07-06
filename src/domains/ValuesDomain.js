@@ -85,7 +85,7 @@ export default class ValuesDomain {
     return this._elements === undefined;
   }
 
-  getElements(): Set<ConcreteValue> {
+  getElements(): Set<ConcreteValue | ObjectSetTemplate> {
     invariant(this._elements !== undefined);
     return this._elements;
   }
@@ -100,7 +100,7 @@ export default class ValuesDomain {
     // all of these values. TODO #1000: probably the upper bound can be quite a bit smaller.
     if (!leftElements || !rightElements || leftElements.size > 100 || rightElements.size > 100)
       return ValuesDomain.topVal;
-    let resultSet : Set<ConcreteValue | ObjectSetTemplate> = new Set();
+    let resultSet: Set<ConcreteValue | ObjectSetTemplate> = new Set();
     let savedHandler = realm.errorHandler;
     let savedIsReadOnly = realm.isReadOnly;
     realm.isReadOnly = true;

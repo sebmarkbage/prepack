@@ -17,7 +17,15 @@ import { CompilerDiagnostic, FatalError } from "../errors.js";
 import { ForInOfHeadEvaluation, ForInOfBodyEvaluation } from "./ForOfStatement.js";
 import { EnumerableOwnProperties, UpdateEmpty } from "../methods/index.js";
 import { Environment } from "../singletons.js";
-import { AbstractValue, AbstractObjectValue, ArrayValue, ObjectValue, StringValue, Value } from "../values/index.js";
+import {
+  AbstractValue,
+  AbstractObjectValue,
+  ArrayValue,
+  ObjectSetTemplate,
+  ObjectValue,
+  StringValue,
+  Value,
+} from "../values/index.js";
 import type {
   BabelNodeExpression,
   BabelNodeForInStatement,
@@ -197,8 +205,12 @@ function emitResidualLoopIfSafe(
           // an abstract object. We can get away with it here only because the concrete object does not
           // escape the code below and is thus never referenced directly in generated code because of this logic.
           for (let oe of ob.values.getElements()) {
-            invariant(oe instanceof ObjectValue);
-            o = oe;
+            if (oe instanceof ObjectSetTemplate) {
+              o = oe.template;
+            } else {
+              invariant(oe instanceof ObjectValue);
+              o = oe;
+            }
           }
         }
         let generator = realm.generator;

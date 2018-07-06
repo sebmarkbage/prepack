@@ -22,7 +22,7 @@ import {
   Completion,
 } from "../completions.js";
 import { InternalGetResultValue } from "./ForOfStatement.js";
-import { EmptyValue, AbstractValue, Value } from "../values/index.js";
+import { EmptyValue, AbstractValue, Value, ConcreteValue } from "../values/index.js";
 import { StrictEqualityComparisonPartial, UpdateEmpty } from "../methods/index.js";
 import { Environment, Path, Join } from "../singletons.js";
 import { FatalError } from "../errors.js";
@@ -352,12 +352,22 @@ export default function(
     let elems = switchValue.values.getElements();
     let n = elems.size;
     if (n > 1 && n < 10) {
-      return Join.mapAndJoin(
-        realm,
-        elems,
-        concreteSwitchValue => AbstractValue.createFromBinaryOp(realm, "===", switchValue, concreteSwitchValue),
-        concreteSwitchValue => evaluationHelper(ast, concreteSwitchValue, strictCode, env, realm, labelSet)
-      );
+      // Filter out non-concrete values.
+      let concreteElems: Set<ConcreteValue> = new Set();
+      for (let elem of elems) {
+        if (elem instanceof ConcreteValue) {
+          concreteElems.add(elem);
+        }
+      }
+      if (concreteElems.size == elems.size) {
+        // If all elements are concrete, join each value.
+        return Join.mapAndJoin(
+          realm,
+          concreteElems,
+          concreteSwitchValue => AbstractValue.createFromBinaryOp(realm, "===", switchValue, concreteSwitchValue),
+          concreteSwitchValue => evaluationHelper(ast, concreteSwitchValue, strictCode, env, realm, labelSet)
+        );
+      }
     }
   }
 

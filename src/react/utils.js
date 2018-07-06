@@ -24,6 +24,7 @@ import {
   ECMAScriptSourceFunctionValue,
   FunctionValue,
   NumberValue,
+  ObjectSetTemplate,
   ObjectValue,
   StringValue,
   SymbolValue,
@@ -577,6 +578,9 @@ export function hasNoPartialKeyOrRef(realm: Realm, props: ObjectValue | Abstract
     }
     let elements = props.values.getElements();
     for (let element of elements) {
+      if (element instanceof ObjectSetTemplate) {
+        element = element.template;
+      }
       invariant(element instanceof ObjectValue);
       let wasSafe = hasNoPartialKeyOrRef(realm, element);
       if (!wasSafe) {

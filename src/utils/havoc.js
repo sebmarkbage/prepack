@@ -27,6 +27,7 @@ import {
   EmptyValue,
   FunctionValue,
   NativeFunctionValue,
+  ObjectSetTemplate,
   ObjectValue,
   PrimitiveValue,
   ProxyValue,
@@ -483,7 +484,14 @@ class ObjectValueHavocingVisitor {
     }
     // If we know which objects this might be, then havoc each of them.
     for (let element of val.values.getElements()) {
-      this.visitValue(element);
+      if (element instanceof ObjectSetTemplate) {
+        // If any of the objects in a set leaks, we need to havoc all of
+        // them since we don't know if there is any overlap. Therefore,
+        // the underlying template gets havoced.
+        this.visitValue(element.template);
+      } else {
+        this.visitValue(element);
+      }
     }
   }
 

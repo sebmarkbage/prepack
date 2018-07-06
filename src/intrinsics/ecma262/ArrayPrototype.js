@@ -971,9 +971,15 @@ export default function(realm: Realm, obj: ObjectValue): void {
       let n = values.size;
       if (n > 1 && n < 10) {
         let a = Create.ArraySpeciesCreate(realm, O.throwIfNotConcreteObject(), 0);
+        let concreteValues: Set<ConcreteValue> = new Set();
+        for (let val of values) {
+          // We have already asserted that this is a number. It can't be ObjectSetTemplate or any other ConcreteValue.
+          invariant(val instanceof NumberValue);
+          concreteValues.add(val);
+        }
         return Join.mapAndJoin(
           realm,
-          values,
+          concreteValues,
           v => AbstractValue.createFromBinaryOp(realm, "===", v, lenVal, lenVal.expressionLocation),
           v => doMap(v, a)
         );
