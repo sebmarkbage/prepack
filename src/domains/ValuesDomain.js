@@ -30,10 +30,12 @@ import {
   EmptyValue,
   NumberValue,
   IntegralValue,
+  ObjectSetTemplate,
   ObjectValue,
   StringValue,
   UndefinedValue,
   Value,
+  ProxyValue,
 } from "../values/index.js";
 import { Utils } from "../singletons.js";
 
@@ -44,7 +46,7 @@ import { Utils } from "../singletons.js";
    one value, one of which will by the EmptyValue.  */
 
 export default class ValuesDomain {
-  constructor(_values: void | Set<ConcreteValue> | ConcreteValue) {
+  constructor(_values: void | Set<ConcreteValue | ObjectSetTemplate> | ConcreteValue) {
     let values = _values;
     if (values instanceof ConcreteValue) {
       let valueSet = new Set();
@@ -56,7 +58,7 @@ export default class ValuesDomain {
 
   static topVal = new ValuesDomain(undefined);
 
-  _elements: void | Set<ConcreteValue>;
+  _elements: void | Set<ConcreteValue | ObjectSetTemplate>;
 
   contains(x: ValuesDomain): boolean {
     let elems = this._elements;
@@ -98,7 +100,7 @@ export default class ValuesDomain {
     // all of these values. TODO #1000: probably the upper bound can be quite a bit smaller.
     if (!leftElements || !rightElements || leftElements.size > 100 || rightElements.size > 100)
       return ValuesDomain.topVal;
-    let resultSet: Set<ConcreteValue> = new Set();
+    let resultSet : Set<ConcreteValue | ObjectSetTemplate> = new Set();
     let savedHandler = realm.errorHandler;
     let savedIsReadOnly = realm.isReadOnly;
     realm.isReadOnly = true;
@@ -108,17 +110,73 @@ export default class ValuesDomain {
       };
       for (let leftElem of leftElements) {
         for (let rightElem of rightElements) {
-          let result = ValuesDomain.computeBinary(realm, op, leftElem, rightElem);
-          if (result instanceof ConcreteValue) {
-            resultSet.add(result);
-          } else {
-            invariant(result instanceof AbstractValue);
-            if (result.values.isTop()) {
-              return ValuesDomain.topVal;
-            }
-            for (let subResult of result.values.getElements()) {
-              resultSet.add(subResult);
-            }
+          switch (op) {
+            case "!==":
+            case "===":
+            case "!=":
+            case "==":
+              if (leftElem instanceof ObjectSetTemplate && rightElem instanceof ObjectSetTemplate) {
+                if (leftElem === rightElem) {
+                  // If this is the same ObjectSetTemplate, then we know that this might be
+                  // the same instance. However, we don't know which one in the set it is
+                  // so this can be either true or false.
+                  resultSet.add(realm.intrinsics.true);
+                  resultSet.add(realm.intrinsics.false);
+                  continue;
+                }
+                // If it is two different ObjectSetTemplates, we know that their identities
+                // never overlap.
+                resultSet.add(realm.intrinsics.false);
+                continue;
+              }
+            // Intentionally fallthrough. In these cases, comparison against the template
+            // will return false or cause a pure coercion.
+            case "+":
+            case "<":
+            case ">":
+            case ">=":
+            case "<=":
+            case ">>>":
+            case "<<":
+            case ">>":
+            case "**":
+            case "%":
+            case "/":
+            case "*":
+            case "-":
+            case "&":
+            case "|":
+            case "^":
+            case "in":
+            case "instanceof":
+              // Normally we don't want to leak the inner template of an ObjectSetTemplate
+              // but we can do that here because it can only leak either through side-effects
+              // or through the computation of an abstract value. We know that we don't allow
+              // side-effects in this function. We also know that we are never going to use
+              // the computation of an pure abstract value. We'll only use its ValuesDomain
+              // and we know that its value domain is always going to contain only primitives.
+              if (leftElem instanceof ObjectSetTemplate) {
+                leftElem = leftElem.template;
+              }
+              if (rightElem instanceof ObjectSetTemplate) {
+                rightElem = rightElem.template;
+              }
+              let result = ValuesDomain.computeBinary(realm, op, leftElem, rightElem);
+              if (result instanceof ConcreteValue) {
+                resultSet.add(result);
+              } else {
+                invariant(result instanceof AbstractValue);
+                if (result.values.isTop()) {
+                  return ValuesDomain.topVal;
+                }
+                for (let subResult of result.values.getElements()) {
+                  resultSet.add(subResult);
+                }
+              }
+              continue;
+            default:
+              // This case is just to catch unvetted ops.
+              invariant(false, "unimplemented " + op);
           }
         }
       }
@@ -319,8 +377,21 @@ export default class ValuesDomain {
       };
       for (let leftElem of leftElements) {
         for (let rightElem of rightElements) {
-          let result = ValuesDomain.computeLogical(realm, op, leftElem, rightElem);
-          resultSet.add(result);
+          let lbool = leftElem instanceof ObjectSetTemplate ? true : To.ToBoolean(realm, leftElem);
+          if (op === "&&") {
+            // ECMA262 12.13.3
+            if (lbool === false) {
+              resultSet.add(leftElem);
+              continue;
+            }
+          } else if (op === "||") {
+            // ECMA262 12.13.3
+            if (lbool === true) {
+              resultSet.add(leftElem);
+              continue;
+            }
+          }
+          resultSet.add(rightElem);
         }
       }
     } catch (e) {
@@ -424,6 +495,15 @@ export default class ValuesDomain {
         throw new FatalError();
       };
       for (let operandElem of operandElements) {
+        // Normally we don't want to leak the inner template of an ObjectSetTemplate
+        // but we can do that here because it can only leak either through side-effects
+        // or through the computation of an abstract value. We know that we don't allow
+        // side-effects in this function. We also know that we are never going to use
+        // the computation of an pure abstract value. We'll only use its ValuesDomain
+        // and we know that its value domain is always going to contain only primitives.
+        if (operandElem instanceof ObjectSetTemplate) {
+          operandElem = operandElem.template;
+        }
         let result = ValuesDomain.computeUnary(realm, op, operandElem);
         if (result instanceof ConcreteValue) {
           resultSet.add(result);
@@ -449,6 +529,9 @@ export default class ValuesDomain {
   includesValueNotOfType(type: typeof Value): boolean {
     invariant(!this.isTop());
     for (let cval of this.getElements()) {
+      if (cval instanceof ObjectSetTemplate) {
+        cval = cval.template;
+      }
       if (!(cval instanceof type)) return true;
     }
     return false;
@@ -457,6 +540,9 @@ export default class ValuesDomain {
   includesValueOfType(type: typeof Value): boolean {
     invariant(!this.isTop());
     for (let cval of this.getElements()) {
+      if (cval instanceof ObjectSetTemplate) {
+        cval = cval.template;
+      }
       if (cval instanceof type) return true;
     }
     return false;
