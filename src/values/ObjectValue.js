@@ -296,6 +296,11 @@ export default class ObjectValue extends ConcreteValue {
   // If set, this happened during object initialization and the value is never changed again, so not tracked.
   _isScopedTemplate: void | true;
 
+  // Specifies whether this object is a template of an abstract value that has more
+  // than one identity. All updates are made weak.
+  // If set, this happened during object initialization and the value is never changed again, so not tracked.
+  _isSetTemplate: void | true;
+
   // If true, then unknown properties should return transitively simple abstract object values
   _simplicityIsTransitive: AbstractValue | BooleanValue;
 
@@ -389,6 +394,10 @@ export default class ObjectValue extends ConcreteValue {
 
   makeNotFinal(): void {
     this._isFinal = this.$Realm.intrinsics.false;
+  }
+
+  isSetTemplate(): boolean {
+    return this._isSetTemplate;
   }
 
   isPartialObject(): boolean {

@@ -412,6 +412,14 @@ export function SameValueNonNumber(realm: Realm, x: ConcreteValue, y: ConcreteVa
     return x === y;
   }
 
+  invariant(x instanceof ObjectValue && y instanceof ObjectValue);
+  // Comparing two templates can yield an abstract value. The template shouldn't be leaked
+  // so this shouldn't happen directly.
+  invariant(
+    x !== y || !x.isSetTemplate() || !y.isSetTemplate(),
+    "two templates of the same set should never be compared directly"
+  );
+
   // 8. Return true if x and y are the same Object value. Otherwise, return false.
   return x === y;
 }
