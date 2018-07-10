@@ -769,10 +769,15 @@ export class Generator {
     this._entries.push(new BindingAssignmentEntry(this.realm, binding, value));
   }
 
-  emitPropertyAssignment(object: ObjectValue, key: string, value: Value): void {
-    if (object.refuseSerialization) return;
+  emitPropertyAssignment(object: Value, key: string | Value, value: Value): void {
+    if (object instanceof ObjectValue && object.refuseSerialization) {
+      return;
+    }
+    if (typeof key === "string") {
+      key = new StringValue(this.realm, key);
+    }
     this._addEntry({
-      args: [object, value, new StringValue(this.realm, key)],
+      args: [object, value, key],
       operationDescriptor: createOperationDescriptor("EMIT_PROPERTY_ASSIGNMENT", { value }),
     });
   }
