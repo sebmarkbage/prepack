@@ -369,17 +369,22 @@ export class PropertiesImplementation {
         }
 
         // b. If Type(Receiver) is not Object, return false.
-        Receiver = Receiver.throwIfNotConcrete();
-        if (!(Receiver instanceof ObjectValue)) return false;
+        if (!Receiver.mightNotBeObject()) return false;
+        invariant(Receiver instanceof ObjectValue || Receiver instanceof AbstractObjectValue);
 
         // c. Let existingDescriptor be ? Receiver.[[GetOwnProperty]](P).
         let existingDescriptor;
-        let binding = InternalGetPropertiesMap(Receiver, P).get(InternalGetPropertiesKey(P));
-        if (binding !== undefined || !(Receiver.isPartialObject() && Receiver.isSimpleObject()))
+        if (Receiver instanceof AbstractObjectValue) {
           existingDescriptor = Receiver.$GetOwnProperty(P);
-        if (existingDescriptor !== undefined) {
-          if (existingDescriptor.descriptor1 === ownDesc) existingDescriptor = ownDesc;
-          else if (existingDescriptor.descriptor2 === ownDesc) existingDescriptor = ownDesc;
+        } else {
+          invariant(Receiver instanceof ObjectValue);
+          let binding = InternalGetPropertiesMap(Receiver, P).get(InternalGetPropertiesKey(P));
+          if (binding !== undefined || !(Receiver.isPartialObject() && Receiver.isSimpleObject()))
+            existingDescriptor = Receiver.$GetOwnProperty(P);
+          if (existingDescriptor !== undefined) {
+            if (existingDescriptor.descriptor1 === ownDesc) existingDescriptor = ownDesc;
+            else if (existingDescriptor.descriptor2 === ownDesc) existingDescriptor = ownDesc;
+          }
         }
         let existingDescValue = !existingDescriptor
           ? realm.intrinsics.undefined

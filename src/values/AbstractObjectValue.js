@@ -663,14 +663,14 @@ export default class AbstractObjectValue extends AbstractValue {
     if (elements.size === 1) {
       for (let cv of elements) {
         invariant(cv instanceof ObjectValue);
-        return cv.$GetPartial(P, Receiver === this ? cv : Receiver);
+        return cv.$GetPartial(P, Receiver === this && !cv.isSetTemplate() ? cv : Receiver);
       }
       invariant(false);
     } else {
       let result;
       for (let cv of elements) {
         invariant(cv instanceof ObjectValue);
-        let cvVal = cv.$GetPartial(P, Receiver === this ? cv : Receiver);
+        let cvVal = cv.$GetPartial(P, Receiver === this && !cv.isSetTemplate() ? cv : Receiver);
         if (result === undefined) result = cvVal;
         else {
           let cond = AbstractValue.createFromBinaryOp(this.$Realm, "===", this, cv, this.expressionLocation);
@@ -692,7 +692,7 @@ export default class AbstractObjectValue extends AbstractValue {
     if (elements.size === 1) {
       for (let cv of elements) {
         invariant(cv instanceof ObjectValue);
-        return cv.$Set(P, V, Receiver === this ? cv : Receiver);
+        return cv.$Set(P, V, Receiver === this && !cv.isSetTemplate() ? cv : Receiver);
       }
       invariant(false);
     } else if (this.kind === "conditional") {
@@ -716,8 +716,8 @@ export default class AbstractObjectValue extends AbstractValue {
       invariant(oldVal2 instanceof Value);
       let newVal1 = AbstractValue.createFromConditionalOp(this.$Realm, cond, V, oldVal1);
       let newVal2 = AbstractValue.createFromConditionalOp(this.$Realm, cond, oldVal2, V);
-      let result1 = ob1.$Set(P, newVal1, ob1);
-      let result2 = ob2.$Set(P, newVal2, ob2);
+      let result1 = ob1.$Set(P, newVal1, Receiver === this ? ob1 : Receiver);
+      let result2 = ob2.$Set(P, newVal2, Receiver === this ? ob2 : Receiver);
       if (result1 !== result2) {
         AbstractValue.reportIntrospectionError(this, P);
         throw new FatalError();
@@ -737,7 +737,7 @@ export default class AbstractObjectValue extends AbstractValue {
         invariant(oldVal instanceof Value);
         let cond = AbstractValue.createFromBinaryOp(this.$Realm, "===", this, cv, this.expressionLocation);
         let v = AbstractValue.createFromConditionalOp(this.$Realm, cond, V, oldVal);
-        if (cv.$Set(P, v, cv)) sawTrue = true;
+        if (cv.$Set(P, v, Receiver === this && !cv.isSetTemplate() ? cv : Receiver)) sawTrue = true;
         else sawFalse = true;
       }
       if (sawTrue && sawFalse) {
@@ -800,16 +800,16 @@ export default class AbstractObjectValue extends AbstractValue {
     if (elements.size === 1) {
       for (let cv of elements) {
         invariant(cv instanceof ObjectValue);
-        return cv.$SetPartial(P, V, Receiver === this ? cv : Receiver);
+        return cv.$SetPartial(P, V, Receiver === this && !cv.isSetTemplate() ? cv : Receiver);
       }
       invariant(false);
     } else {
       for (let cv of elements) {
         invariant(cv instanceof ObjectValue);
-        let oldVal = this.$GetPartial(P, Receiver === this ? cv : Receiver);
+        let oldVal = this.$GetPartial(P, Receiver === this && !cv.isSetTemplate() ? cv : Receiver);
         let cond = AbstractValue.createFromBinaryOp(this.$Realm, "===", this, cv, this.expressionLocation);
         let v = AbstractValue.createFromConditionalOp(this.$Realm, cond, V, oldVal);
-        cv.$SetPartial(P, v, Receiver === this ? cv : Receiver);
+        cv.$SetPartial(P, v, Receiver === this && !cv.isSetTemplate() ? cv : Receiver);
       }
       return true;
     }
