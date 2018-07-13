@@ -90,6 +90,11 @@ function InternalGetPropertiesMap(O: ObjectValue, P: PropertyKeyValue): Map<any,
 }
 
 function InternalSetProperty(realm: Realm, O: ObjectValue, P: PropertyKeyValue, desc: Descriptor) {
+  if (O.isSetTemplate()) {
+    // If this is a set template, we need to only weakly update the descriptor.
+    desc = weaklyUpdateDescriptor(realm, undefined, desc);
+  }
+
   let map = InternalGetPropertiesMap(O, P);
   let key = InternalGetPropertiesKey(P);
   let propertyBinding = map.get(key);
@@ -158,6 +163,35 @@ function InternalUpdatedProperty(realm: Realm, O: ObjectValue, P: PropertyKeyVal
       }
     }
   }
+}
+
+function weaklyUpdateValue<T, D>(realm: Realm, value1: T, value2: T, missing: D): T | AbstractValue {
+  let val1 = value1 || missing;
+  invariant(val1 instanceof Value);
+  let val2 = value2 || missing;
+  invariant(val2 instanceof Value);
+  if (val1 === val2) {
+    return val1;
+  }
+  if (
+    !(val1 instanceof AbstractValue) &&
+    !(val2 instanceof AbstractValue) &&
+    SameValuePartial(realm, val1.throwIfNotConcrete(), val2.throwIfNotConcrete())
+  ) {
+    return val1;
+  }
+  return AbstractValue.createFromWeakPropertyUpdate(realm, val1, val2);
+}
+
+function weaklyUpdateDescriptor(realm: Realm, desc1: void | Descriptor, desc2: Descriptor): Descriptor {
+  let weakDesc = Object.assign({}, desc1);
+  if (IsDataDescriptor(realm, desc2)) {
+    weakDesc.value = weaklyUpdateValue(realm, weakDesc.value, desc2.value, realm.intrinsics.empty);
+  } else {
+    weakDesc.set = weaklyUpdateValue(realm, weakDesc.set, desc2.set, realm.intrinsics.undefined);
+    weakDesc.get = weaklyUpdateValue(realm, weakDesc.get, desc2.get, realm.intrinsics.undefined);
+  }
+  return weakDesc;
 }
 
 function havocDescriptor(realm: Realm, desc: Descriptor) {
@@ -561,7 +595,12 @@ export class PropertiesImplementation {
       }
       invariant(propertyBinding !== undefined);
       realm.recordModifiedProperty(propertyBinding);
-      propertyBinding.descriptor = undefined;
+      if (O.isSetTemplate() && propertyBinding.descriptor !== undefined) {
+        // If this is a set template, we need to only weakly delete the descriptor.
+        propertyBinding.descriptor = weaklyUpdateDescriptor(realm, undefined, propertyBinding.descriptor);
+      } else {
+        propertyBinding.descriptor = undefined;
+      }
       InternalUpdatedProperty(realm, O, P, desc);
 
       // b. Return true.
@@ -772,6 +811,17 @@ export class PropertiesImplementation {
     // 6. If IsGenericDescriptor(Desc) is true, no further validation is required.
     if (IsGenericDescriptor(realm, Desc)) {
     } else if (IsDataDescriptor(realm, current) !== IsDataDescriptor(realm, Desc)) {
+      if (O !== undefined && O.isSetTemplate()) {
+        let error = new CompilerDiagnostic(
+          "Changing a descriptor type of an object template is not supported.",
+          realm.currentLocation,
+          "PP0038",
+          "FatalError"
+        );
+        realm.handleError(error);
+        throw new FatalError();
+      }
+
       // 7. Else if IsDataDescriptor(current) and IsDataDescriptor(Desc) have different results, then
       // a. Return false, if the [[Configurable]] field of current is false.
       if (!current.configurable) return false;
@@ -840,6 +890,12 @@ export class PropertiesImplementation {
     // 10. If O is not undefined, then
     if (O !== undefined) {
       invariant(P !== undefined);
+
+      if (O.isSetTemplate()) {
+        // If this is a set template, we need to only weakly update the descriptor.
+        Desc = weaklyUpdateDescriptor(realm, current, Desc);
+      }
+
       let key = InternalGetPropertiesKey(P);
       let map = InternalGetPropertiesMap(O, P);
       let propertyBinding = map.get(key);

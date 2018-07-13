@@ -53,6 +53,7 @@ export type AbstractValueKind =
   | "widened property"
   | "widened return result"
   | "widened numeric property"
+  | "sentinel weak property"
   | "conditional"
   | "resolved"
   | "dummy parameter"
@@ -860,6 +861,18 @@ export default class AbstractValue extends Value {
     result.kind = "widened property";
     result.mightBeEmpty = resultTemplate.mightBeEmpty;
     result.expressionLocation = resultTemplate.expressionLocation;
+    return result;
+  }
+
+  static createFromWeakPropertyUpdate(realm: Realm, value1: Value, value2: Value): AbstractValue {
+    let types = TypesDomain.joinValues(value1, value2);
+    let values = ValuesDomain.joinValues(realm, value1, value2);
+    let [hash] = hashCall("sentinel weak property");
+    let Constructor = Value.isTypeCompatibleWith(types.getType(), ObjectValue) ? AbstractObjectValue : AbstractValue;
+    let result = new Constructor(realm, types, values, hash, []);
+    result.kind = "sentinel weak property";
+    result.mightBeEmpty = value1.mightHaveBeenDeleted() || value2.mightHaveBeenDeleted();
+    result.expressionLocation = value1.expressionLocation;
     return result;
   }
 
